@@ -1,0 +1,46 @@
+## Example application using the app-template Helm chart
+## Rename this file and duplicate for each service
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: example-app-dev
+  namespace: argocd
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    environment: dev
+    app: example-app
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: tutenlabs-non-prod
+
+  source:
+    repoURL: "https://github.com/marcosmeoni/tuten-gitops-bootstrap"
+    targetRevision: HEAD
+    path: helm/charts/app-template
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
+      parameters:
+        - name: api.image.repository
+          value: "ghcr.io/tutenlabs/example-app"
+        - name: api.image.tag
+          value: "latest"
+        - name: worker.image.repository
+          value: "ghcr.io/tutenlabs/example-app"
+        - name: worker.image.tag
+          value: "latest"
+        - name: ingress.host
+          value: "example-app.dev.tutenlabs.internal"
+
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: apps-dev
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
