@@ -1,0 +1,46 @@
+---
+# App of Apps — root application that manages all DEV applications declaratively
+# FIX-09: targetRevision should be pinned per environment. HEAD is acceptable for
+# non-prod (dev) where continuous delivery is desired, but set to branch name explicitly
+# rather than the implicit HEAD alias, for clarity and auditability.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-of-apps-dev
+  namespace: argocd
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    environment: dev
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  project: tutenlabs-non-prod
+
+  source:
+    repoURL: "https://github.com/marcosmeoni/tuten-gitops-bootstrap"
+    # FIX-09: Use branch name explicitly. For UAT/PRD, pin to a tag/SHA instead.
+    targetRevision: main
+    path: argocd/apps/dev
+
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=false  # Namespaces managed by Terraform
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ServerSideApply=true  # Better conflict handling for managed fields
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

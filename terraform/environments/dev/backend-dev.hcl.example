@@ -1,0 +1,17 @@
+# FIX-01: Backend config file — copy to backend-dev.hcl and populate values.
+# NEVER commit backend-dev.hcl (it is gitignored).
+# Usage: terraform init -backend-config=backend-dev.hcl
+
+bucket     = "tutenlabs-tfstate-dev"
+key        = "gitops-bootstrap/dev/terraform.tfstate"
+region     = "us-ashburn-1"
+# OCI Object Storage S3-compatible endpoint
+endpoint   = "https://<tenancy-namespace>.compat.objectstorage.us-ashburn-1.oraclecloud.com"
+access_key = "<OCI_ACCESS_KEY>"
+secret_key = "<OCI_SECRET_KEY>"
+
+# Required for OCI S3 compat
+skip_region_validation      = true
+skip_credentials_validation = true
+skip_metadata_api_check     = true
+force_path_style            = true
