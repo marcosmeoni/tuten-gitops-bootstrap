@@ -1,0 +1,31 @@
+# DEV-specific overrides
+global:
+  environment: dev
+
+api:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+worker:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+ingress:
+  enabled: true
+  className: nginx
+  host: "myapp.dev.tutenlabs.internal"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    # No TLS on dev (internal only)

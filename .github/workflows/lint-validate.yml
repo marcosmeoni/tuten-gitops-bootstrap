@@ -1,0 +1,159 @@
+name: Lint & Validate
+
+# FIX-06: Remove push on main — validate only on PRs and feature branches (not on merge commits)
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - "feat/**"
+      - "fix/**"
+      - "chore/**"
+
+permissions:
+  contents: read
+
+jobs:
+  terraform-validate:
+    name: Terraform Validate & Lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [dev]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"  # FIX-07: pin exact version, not "1.7.x"
+
+      - name: Terraform Init (dry-run, no backend)
+        working-directory: terraform/environments/${{ matrix.env }}
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        working-directory: terraform/environments/${{ matrix.env }}
+        run: terraform validate
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.50.3  # FIX-07: pin tflint version
+
+      - name: TFLint
+        working-directory: terraform/environments/${{ matrix.env }}
+        run: |
+          tflint --init
+          tflint --recursive
+
+  checkov-scan:
+    name: Checkov Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # FIX-07: Pin checkov-action to exact SHA for supply chain security
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@3b88a57a9fd211c7c8f7e2a17a9a0f5c3ea9295  # v12.2847.0
+        with:
+          directory: terraform/
+          framework: terraform
+          soft_fail: false
+          output_format: cli
+          skip_check: CKV_TF_1  # local modules — no registry pinning needed
+
+  helm-lint:
+    name: Helm Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "v3.14.4"  # FIX-07: pin patch version
+
+      - name: Helm Lint (default values)
+        run: helm lint helm/charts/app-template/
+
+      - name: Helm Lint (dev values)
+        run: |
+          helm lint helm/charts/app-template/ \
+            -f helm/charts/app-template/values.yaml \
+            -f helm/charts/app-template/values-dev.yaml
+
+      - name: Helm Template (dry-run render)
+        run: |
+          helm template test-release helm/charts/app-template/ \
+            -f helm/charts/app-template/values.yaml \
+            -f helm/charts/app-template/values-dev.yaml \
+            --set api.image.repository=test/image \
+            --set api.image.tag=v1.0.0 \
+            --set worker.image.repository=test/image \
+            --set worker.image.tag=v1.0.0 \
+            --set ingress.host=test.dev.internal \
+            --debug
+
+  yamllint:
+    name: YAML Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # FIX-08: Exclude helm templates dir — Go template syntax causes false positives
+      - name: Run yamllint (ArgoCD + CI only)
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          config_data: |
+            extends: default
+            rules:
+              line-length:
+                max: 150
+                level: warning
+              comments:
+                min-spaces-from-content: 1
+              truthy:
+                allowed-values: ['true', 'false']
+                check-keys: false
+              document-start: disable
+          file_or_dir: |
+            argocd/
+            .github/workflows/
+
+      # FIX-08: Validate helm values files separately (no template syntax)
+      - name: Run yamllint (Helm values only)
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          config_data: |
+            extends: default
+            rules:
+              line-length:
+                max: 150
+                level: warning
+              truthy:
+                check-keys: false
+              document-start: disable
+          file_or_dir: |
+            helm/charts/app-template/values.yaml
+            helm/charts/app-template/values-dev.yaml
+
+  argocd-validate:
+    name: ArgoCD Manifest Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.4/kubeconform-linux-amd64.tar.gz \
+            | tar xz && mv kubeconform /usr/local/bin/
+
+      - name: Validate ArgoCD manifests
+        run: |
+          find argocd/ -name "*.yaml" | xargs kubeconform \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -ignore-missing-schemas \
+            -summary

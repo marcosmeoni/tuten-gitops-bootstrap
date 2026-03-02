@@ -1,0 +1,13 @@
+apiVersion: v2
+name: app-template
+description: Tutenlabs base Helm chart for API + Worker + Ingress (non-prod)
+type: application
+version: 0.1.0
+appVersion: "latest"
+maintainers:
+  - name: platform-engineering
+    email: platform@tutenlabs.com
+keywords:
+  - tutenlabs
+  - gitops
+  - non-prod

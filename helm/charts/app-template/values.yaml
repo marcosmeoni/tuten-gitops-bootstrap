@@ -1,0 +1,123 @@
+# Default values — override per environment in values-<env>.yaml
+global:
+  environment: dev
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# API deployment
+api:
+  enabled: true
+  name: api
+  replicaCount: 1
+  image:
+    repository: ""
+    # FIX-04: Do NOT use "latest" — always pin to a specific tag or digest in consuming apps.
+    # This default is intentionally empty to force explicit override.
+    tag: ""
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 3
+  startupProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 12  # 60s max startup
+  env: []
+  envFrom: []
+
+# Worker deployment
+worker:
+  enabled: true
+  name: worker
+  replicaCount: 1
+  image:
+    repository: ""
+    # FIX-04: Pin tag explicitly — empty forces override in consuming Application manifest
+    tag: ""
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # FIX-05: Worker now has liveness + readiness probes
+  # Override path/port per app; defaults to TCP socket probe on port 8080
+  livenessProbe:
+    tcpSocket:
+      port: 8080
+    initialDelaySeconds: 30
+    periodSeconds: 15
+    failureThreshold: 3
+  readinessProbe:
+    tcpSocket:
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 3
+  env: []
+  envFrom: []
+
+# Ingress
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  host: ""  # e.g. myapp.dev.tutenlabs.internal
+  tls: []
+
+# FIX-11: Use null instead of {} to avoid rendering empty annotations block
+podAnnotations: ~
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Autoscaling (disabled by default on non-prod)
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
