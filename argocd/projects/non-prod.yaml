@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: tutenlabs-non-prod
+  namespace: argocd
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    environment: non-prod
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: "Tutenlabs non-production environments (dev, uat)"
+
+  # Only allow from this repo
+  sourceRepos:
+    - "https://github.com/marcosmeoni/tuten-gitops-bootstrap"
+
+  # Only allow deployment to DEV/UAT namespaces — never PRD
+  destinations:
+    - namespace: "apps-dev"
+      server: "https://kubernetes.default.svc"
+    - namespace: "monitoring-dev"
+      server: "https://kubernetes.default.svc"
+    - namespace: "argocd"
+      server: "https://kubernetes.default.svc"
+    - namespace: "ingress-nginx"
+      server: "https://kubernetes.default.svc"
+
+  # Restrict resource kinds (no ClusterRole, no PV)
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: ResourceQuota
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  roles:
+    - name: developer
+      description: "Developer read-only access"
+      policies:
+        - p, proj:tutenlabs-non-prod:developer, applications, get, tutenlabs-non-prod/*, allow
+        - p, proj:tutenlabs-non-prod:developer, applications, sync, tutenlabs-non-prod/*, allow
+      groups:
+        - tutenlabs:developers
+
+    - name: platform-admin
+      description: "Platform engineers full access to non-prod"
+      policies:
+        - p, proj:tutenlabs-non-prod:platform-admin, applications, *, tutenlabs-non-prod/*, allow
+      groups:
+        - tutenlabs:platform-engineering
